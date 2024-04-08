@@ -1,0 +1,165 @@
+using System;
+using System.IO;
+using System.Threading;
+
+class Program
+{
+    static Mutex mutex = new Mutex();
+    static bool firstThreadDone = false;
+    static bool secondThreadDone = false;
+    static bool thirdThreadDone = false;
+
+    static void Main()
+    {
+        Thread firstThread = new Thread(GenerateRandomNumbers);
+        Thread secondThread = new Thread(ExtractPrimes);
+        Thread thirdThread = new Thread(ExtractPrimesWithLastDigit7);
+        Thread fourthThread = new Thread(GenerateReport);
+
+        firstThread.Start();
+        secondThread.Start();
+        thirdThread.Start();
+        fourthThread.Start();
+
+        firstThread.Join();
+        secondThread.Join();
+        thirdThread.Join();
+        fourthThread.Join();
+
+        Console.WriteLine("Всі потоки завершили своє виконання.");
+    }
+
+    static void GenerateRandomNumbers()
+    {
+        mutex.WaitOne();
+        try
+        {
+            using (StreamWriter writer = new StreamWriter("numbers.txt"))
+            {
+                Random rand = new Random();
+                for (int i = 0; i < 100; i++)
+                {
+                    writer.WriteLine(rand.Next(1, 1000));
+                }
+            }
+        }
+        finally
+        {
+            firstThreadDone = true;
+            mutex.ReleaseMutex();
+        }
+    }
+
+    static void ExtractPrimes()
+    {
+        while (!firstThreadDone)
+        {
+            Thread.Sleep(100);
+        }
+
+        mutex.WaitOne();
+        try
+        {
+            using (StreamReader reader = new StreamReader("numbers.txt"))
+            using (StreamWriter writer = new StreamWriter("primes.txt"))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    int number = int.Parse(line);
+                    if (IsPrime(number))
+                    {
+                        writer.WriteLine(number);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            secondThreadDone = true;
+            mutex.ReleaseMutex();
+        }
+    }
+
+    static void ExtractPrimesWithLastDigit7()
+    {
+        while (!secondThreadDone)
+        {
+            Thread.Sleep(100);
+        }
+
+        mutex.WaitOne();
+        try
+        {
+            using (StreamReader reader = new StreamReader("primes.txt"))
+            using (StreamWriter writer = new StreamWriter("primes_ending_with_7.txt"))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    int number = int.Parse(line);
+                    if (number % 10 == 7)
+                    {
+                        writer.WriteLine(number);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            thirdThreadDone = true;
+            mutex.ReleaseMutex();
+        }
+    }
+
+    static void GenerateReport()
+    {
+        while (!thirdThreadDone)
+        {
+            Thread.Sleep(100);
+        }
+
+        mutex.WaitOne();
+        try
+        {
+            using (StreamWriter writer = new StreamWriter("report.txt"))
+            {
+                WriteFileDetails(writer, "numbers.txt");
+                WriteFileDetails(writer, "primes.txt");
+                WriteFileDetails(writer, "primes_ending_with_7.txt");
+            }
+        }
+        finally
+        {
+            mutex.ReleaseMutex();
+        }
+    }
+
+    static void WriteFileDetails(StreamWriter writer, string fileName)
+    {
+        writer.WriteLine($"Деталі файлу: {fileName}");
+        writer.WriteLine($"Кількість чисел: {File.ReadLines(fileName).Count()}");
+        writer.WriteLine($"Розмір файлу: {new FileInfo(fileName).Length} байт");
+        writer.WriteLine("Вміст файлу:");
+
+        foreach (string line in File.ReadAllLines(fileName))
+        {
+            writer.WriteLine(line);
+        }
+
+        writer.WriteLine();
+    }
+
+    static bool IsPrime(int number)
+    {
+        if (number <= 1)
+            return false;
+
+        for (int i = 2; i <= Math.Sqrt(number); i++)
+        {
+            if (number % i == 0)
+                return false;
+        }
+        return true;
+    }
+}
